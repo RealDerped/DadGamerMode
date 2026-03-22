@@ -1,59 +1,38 @@
-﻿using BepInEx.Logging;
-using Comfort.Common;
-using dvize.GodModeTest;
+using System;
+using System.Reflection;
+using SPT.Reflection.Patching;
 using EFT;
-using UnityEngine;
+using EFT.HealthSystem;
+using HarmonyLib;
 
-namespace dvize.DadGamerMode.Features
+namespace DadGamerMode.Patches
 {
-    internal class NoFallingDamageComponent : MonoBehaviour
+    public class FallingDamagePatch : ModulePatch
     {
-        private Player player;
-        protected static ManualLogSource Logger
+        protected override MethodBase GetTargetMethod()
         {
-            get; private set;
+            // Specifically targets the method that calculates leg/body damage upon impact
+            return AccessTools.Method(typeof(ActiveHealthController), nameof(ActiveHealthController.ApplyFallingDamage));
         }
 
-        private NoFallingDamageComponent()
+        [PatchPrefix]
+        private static bool Prefix(ActiveHealthController __instance)
         {
-            if (Logger == null)
+            // Check if the player being processed is the user
+            if (!__instance.Player.IsYourPlayer)
             {
-                Logger = BepInEx.Logging.Logger.CreateLogSource(nameof(NoFallingDamageComponent));
+                return true;
             }
-        }
 
-        private void Start()
-        {
-            player = Singleton<GameWorld>.Instance.MainPlayer;
-            Logger.LogDebug("DadGamerMode: Setting No Falling Damage");
-        }
-        private void Update()
-        {
-            player.ActiveHealthController.FallSafeHeight = dadGamerPlugin.NoFallingDamage.Value ? 999999f : 1.8f;
-        }
-
-        internal static void Enable()
-        {
-            if (Singleton<IBotGame>.Instantiated)
+            // Check the config toggle we set up in Plugin.cs
+            if (Plugin.NoFallDamage.Value)
             {
-                var gameWorld = Singleton<GameWorld>.Instance;
-                gameWorld.GetOrAddComponent<NoFallingDamageComponent>();
+                // Returning false stops the original method from running, 
+                // effectively deleting the fall damage before it's calculated.
+                return false; 
             }
+
+            return true;
         }
-
-        private static void Disable()
-        {
-            if (!dadGamerPlugin.NoFallingDamage.Value)
-            {
-                var gameWorld = Singleton<GameWorld>.Instance;
-
-                var player = gameWorld.MainPlayer;
-                Logger.LogDebug("DadGamerMode: Setting Falling Damage To Normal");
-
-                player.ActiveHealthController.FallSafeHeight = 1.8f;
-
-            }
-        }
-
     }
 }
